@@ -4,11 +4,16 @@ use crate::common::hub_helper;
 use crate::common::table;
 use crate::common::table::Table;
 use crate::hub::Hub;
+use google_drive3::api::Drive;
+use std::cmp::min;
 use std::error;
 use std::fmt;
 use std::io;
 
+const MAX_PAGE_SIZE: usize = 100;
+
 pub struct Config {
+    pub max_drives: usize,
     pub skip_header: bool,
     pub field_separator: String,
 }
@@ -17,7 +22,7 @@ pub async fn list(config: Config) -> Result<(), Error> {
     let hub = hub_helper::get_hub().await.map_err(Error::Hub)?;
     let delegate_config = UploadDelegateConfig::default();
 
-    let drives = list_drives(&hub, delegate_config)
+    let drives = list_drives(&hub, &config, delegate_config)
         .await
         .map_err(Error::ListDrives)?;
 
@@ -54,19 +59,45 @@ fn print_drives_table(config: &Config, drives: Vec<google_drive3::api::Drive>) {
 
 pub async fn list_drives(
     hub: &Hub,
+    config: &Config,
     delegate_config: UploadDelegateConfig,
 ) -> Result<Vec<google_drive3::api::Drive>, google_drive3::Error> {
     let mut delegate = UploadDelegate::new(delegate_config);
+    let mut collected_drives: Vec<Drive> = Vec::new();
+    let mut page_token: Option<String> = None;
 
-    let (_, drives_list) = hub
-        .drives()
-        .list()
-        .add_scope(google_drive3::api::Scope::Full)
-        .delegate(&mut delegate)
-        .doit()
-        .await?;
+    loop {
+        let max_drives = config.max_drives - collected_drives.len();
+        let page_size = min(MAX_PAGE_SIZE, max_drives);
 
-    Ok(drives_list.drives.unwrap_or_default())
+        let mut request = hub
+            .drives()
+            .list()
+            .add_scope(google_drive3::api::Scope::Full)
+            .delegate(&mut delegate);
+
+        // If there's a next page, set the page token
+        if let Some(token) = page_token {
+            request = request.page_token(&token);
+        }
+
+        let (_, drives_list) = request.page_size(page_size as i32).doit().await?;
+
+        // Collect drives from the current page
+        if let Some(mut drives) = drives_list.drives {
+            collected_drives.append(&mut drives);
+        }
+
+        // Check if there's another page
+        page_token = drives_list.next_page_token;
+
+        if collected_drives.len() >= config.max_drives || page_token.is_none() {
+            break;
+        }
+    }
+
+    let max_drives = min(config.max_drives, collected_drives.len());
+    Ok(collected_drives[0..max_drives].to_vec())
 }
 
 #[derive(Debug)]

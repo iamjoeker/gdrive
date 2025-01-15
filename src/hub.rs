@@ -32,7 +32,8 @@ impl Hub {
     pub async fn new(auth: Auth) -> Hub {
         let connector = HttpsConnectorBuilder::new()
             .with_native_roots()
-            .https_or_http()
+            .unwrap()
+            .https_only()
             .enable_http1()
             .enable_http2()
             .build();

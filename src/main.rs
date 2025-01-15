@@ -97,6 +97,10 @@ enum AccountCommand {
 enum DriveCommand {
     /// List drives
     List {
+        /// max number of drives to return (default 10)
+        #[arg(long, default_value_t = 10)]
+        max: usize,
+
         /// Don't print header
         #[arg(long)]
         skip_header: bool,
@@ -436,9 +440,11 @@ async fn main() {
             // fmt
             match command {
                 DriveCommand::List {
+                    max,
                     skip_header,
                     field_separator,
                 } => drives::list(drives::list::Config {
+                    max_drives: max,
                     skip_header,
                     field_separator,
                 })
