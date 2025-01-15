@@ -439,7 +439,6 @@ name = "gdrive"
 version = "3.9.1"
 dependencies = [
  "async-recursion",
- "bytes",
  "clap",
  "exponential-backoff",
  "futures",
