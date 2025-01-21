@@ -12,7 +12,7 @@ use std::io;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub file_id: String,
+    pub file_ids: Vec<String>,
     pub skip_header: bool,
     pub field_separator: String,
 }
@@ -20,25 +20,34 @@ pub struct Config {
 pub async fn list(config: Config) -> Result<(), Error> {
     let hub = hub_helper::get_hub().await.map_err(Error::Hub)?;
     let delegate_config = UploadDelegateConfig::default();
+    let mut all_perms: Vec<[String; 7]> = vec![];
 
-    files::info::get_file(&hub, &config.file_id)
-        .await
-        .map_err(Error::GetFile)?;
+    for (_, file_id) in config.file_ids.iter().enumerate() {
+        files::info::get_file(&hub, &file_id)
+            .await
+            .map_err(Error::GetFile)?;
 
-    let permissions = list_permissions(&hub, delegate_config, &config.file_id)
-        .await
-        .map_err(Error::ListPermissions)?;
+        let permissions = list_permissions(&hub, delegate_config, &file_id)
+            .await
+            .map_err(Error::ListPermissions)?;
 
-    print_permissions_table(&config, permissions);
+        let mut new_row = build_permissions_for_file(&file_id, permissions);
+        all_perms.append(&mut new_row);
+    }
+    print_permissions_table(&config, &all_perms);
 
     Ok(())
 }
 
-fn print_permissions_table(config: &Config, permissions: Vec<google_drive3::api::Permission>) {
-    let mut values: Vec<[String; 6]> = vec![];
+fn build_permissions_for_file(
+    file_id: &String,
+    permissions: Vec<google_drive3::api::Permission>,
+) -> Vec<[String; 7]> {
+    let mut values: Vec<[String; 7]> = vec![];
 
     for permission in permissions {
         values.push([
+            file_id.clone(),
             permission.id.unwrap_or_default(),
             permission.type_.unwrap_or_default(),
             permission.role.unwrap_or_default(),
@@ -48,9 +57,21 @@ fn print_permissions_table(config: &Config, permissions: Vec<google_drive3::api:
         ])
     }
 
+    values
+}
+
+fn print_permissions_table(config: &Config, permissions: &Vec<[String; 7]>) {
     let table = Table {
-        header: ["Id", "Type", "Role", "Email", "Domain", "Discoverable"],
-        values,
+        header: [
+            "File_Id",
+            "Id",
+            "Type",
+            "Role",
+            "Email",
+            "Domain",
+            "Discoverable",
+        ],
+        values: permissions.clone(),
     };
 
     let _ = table::write(

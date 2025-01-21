@@ -5,7 +5,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct UploadDelegateConfig {
     pub chunk_size: ChunkSize,
     pub backoff_config: BackoffConfig,
@@ -120,7 +120,7 @@ fn should_retry(status: http::StatusCode) -> bool {
     status.is_server_error() || status == http::StatusCode::TOO_MANY_REQUESTS
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct BackoffConfig {
     pub max_retries: u32,
     pub min_sleep: Duration,
@@ -167,7 +167,7 @@ impl Backoff {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Copy)]
 pub enum ChunkSize {
     Approx1,
     Approx2,

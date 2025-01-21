@@ -353,8 +353,9 @@ enum PermissionCommand {
 
     /// List permissions for a file
     List {
-        /// File id
-        file_id: String,
+        /// Space delimited list of file id(s) for which permissions will be listed.
+        #[clap(num_args = 1.., required = true, value_delimiter = ' ', value_parser)]
+        file_ids: Vec<String>,
 
         /// Don't print header
         #[arg(long)]
@@ -690,13 +691,13 @@ async fn main() {
                 }
 
                 PermissionCommand::List {
-                    file_id,
+                    file_ids,
                     skip_header,
                     field_separator,
                 } => {
                     // fmt
                     permissions::list(permissions::list::Config {
-                        file_id,
+                        file_ids,
                         skip_header,
                         field_separator,
                     })
