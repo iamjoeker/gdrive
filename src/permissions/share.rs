@@ -10,11 +10,9 @@ use std::fmt::Formatter;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub file_id: String,
     pub role: permission::Role,
     pub type_: permission::Type,
     pub discoverable: bool,
-    pub email: Option<String>,
     pub domain: Option<String>,
 }
 
@@ -32,22 +30,44 @@ impl Config {
     }
 }
 
-pub async fn share(config: Config) -> Result<(), Error> {
-    err_if_missing_email(&config)?;
+pub async fn share(
+    config: Config,
+    file_ids: Vec<String>,
+    emails: Option<Vec<String>>,
+) -> Result<(), Error> {
+    err_if_missing_email(&config, emails.clone())?;
     err_if_missing_domain(&config)?;
 
     let hub = hub_helper::get_hub().await.map_err(Error::Hub)?;
     let delegate_config = UploadDelegateConfig::default();
+    let emails_vec = emails.unwrap_or(vec!["".to_string()]);
 
-    let file = files::info::get_file(&hub, &config.file_id)
-        .await
-        .map_err(Error::GetFile)?;
+    for file_id in file_ids {
+        let file = files::info::get_file(&hub, &file_id)
+            .await
+            .map_err(Error::GetFile)?;
 
-    print_grant_details(&file, &config);
+        for email in &emails_vec {
+            create_permission(
+                &hub,
+                delegate_config,
+                &file_id,
+                config.role,
+                config.type_,
+                config.allow_file_discovery(),
+                config.requires_ownership_transfer(),
+                match email.as_str() {
+                    "" => None,
+                    _ => Some(email.clone()),
+                },
+                config.domain.clone(),
+            )
+            .await
+            .map_err(Error::CreatePermission)?;
 
-    create_permission(&hub, delegate_config, &config)
-        .await
-        .map_err(Error::CreatePermission)?;
+            print_grant_details(&file, &config, Some(email.clone()));
+        }
+    }
 
     Ok(())
 }
@@ -55,27 +75,33 @@ pub async fn share(config: Config) -> Result<(), Error> {
 pub async fn create_permission(
     hub: &Hub,
     delegate_config: UploadDelegateConfig,
-    config: &Config,
+    file_id: &str,
+    role: permission::Role,
+    perm_type: permission::Type,
+    allow_file_discovery: Option<bool>,
+    requires_ownership_transfer: bool,
+    email_address: Option<String>,
+    domain: Option<String>,
 ) -> Result<google_drive3::api::Permission, google_drive3::Error> {
     let mut delegate = UploadDelegate::new(delegate_config);
 
     let new_permission = google_drive3::api::Permission {
-        role: Some(config.role.to_string()),
-        type_: Some(config.type_.to_string()),
-        allow_file_discovery: config.allow_file_discovery(),
-        email_address: config.email.clone(),
-        domain: config.domain.clone(),
+        role: Some(role.to_string()),
+        type_: Some(perm_type.to_string()),
+        allow_file_discovery,
+        email_address,
+        domain,
         ..google_drive3::api::Permission::default()
     };
 
     let (_, permission) = hub
         .permissions()
-        .create(new_permission, &config.file_id)
+        .create(new_permission.clone(), &file_id)
         .param(
             "fields",
             "id,role,type,domain,emailAddress,allowFileDiscovery",
         )
-        .transfer_ownership(config.requires_ownership_transfer())
+        .transfer_ownership(requires_ownership_transfer)
         .add_scope(google_drive3::api::Scope::Full)
         .delegate(&mut delegate)
         .supports_all_drives(true)
@@ -124,8 +150,8 @@ impl Display for Error {
     }
 }
 
-fn err_if_missing_email(config: &Config) -> Result<(), Error> {
-    if config.type_.requires_email() && config.email.is_none() {
+fn err_if_missing_email(config: &Config, emails: Option<Vec<String>>) -> Result<(), Error> {
+    if config.type_.requires_email() && (emails.is_none() || emails.is_some_and(|v| v.is_empty())) {
         return Err(Error::MissingEmail(config.type_.clone()));
     }
 
@@ -140,7 +166,7 @@ fn err_if_missing_domain(config: &Config) -> Result<(), Error> {
     Ok(())
 }
 
-fn print_grant_details(file: &google_drive3::api::File, config: &Config) {
+fn print_grant_details(file: &google_drive3::api::File, config: &Config, email: Option<String>) {
     if config.type_.requires_domain() {
         println!(
             "Granting '{}' permission to {} '{}' for '{}'",
@@ -154,7 +180,7 @@ fn print_grant_details(file: &google_drive3::api::File, config: &Config) {
             "Granting '{}' permission to '{}' with email '{}' for '{}'",
             config.role,
             config.type_,
-            config.email.clone().unwrap_or_default(),
+            email.unwrap_or_default(),
             file.name.clone().unwrap_or_default()
         );
     } else {

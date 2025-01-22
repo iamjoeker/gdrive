@@ -327,8 +327,9 @@ enum FileCommand {
 enum PermissionCommand {
     /// Grant permission to file
     Share {
-        /// File id
-        file_id: String,
+        /// Space delimited list of file id(s) for which permissions will be listed.
+        #[clap(num_args = 1.., required = true, value_delimiter = ' ', value_parser)]
+        file_ids: Vec<String>,
 
         /// The role granted by this permission. Allowed values are: owner, organizer, fileOrganizer, writer, commenter, reader
         #[arg(long, default_value_t = permission::Role::default())]
@@ -338,9 +339,9 @@ enum PermissionCommand {
         #[arg(long, default_value_t = permission::Type::default())]
         type_: permission::Type,
 
-        /// Email address. Required for user and group type
-        #[arg(long)]
-        email: Option<String>,
+        /// Email addresses (comma separated). Required for user and group type
+        #[arg(long, required = false, num_args = 1.., value_delimiter = ',', value_parser)]
+        emails: Option<Vec<String>>,
 
         /// Domain. Required for domain type
         #[arg(long)]
@@ -670,22 +671,23 @@ async fn main() {
         Command::Permissions { command } => {
             match command {
                 PermissionCommand::Share {
-                    file_id,
+                    file_ids,
                     role,
                     type_,
                     discoverable,
-                    email,
+                    emails,
                     domain,
                 } => {
                     // fmt
-                    permissions::share(permissions::share::Config {
-                        file_id,
-                        role,
-                        type_,
-                        discoverable,
-                        email,
-                        domain,
-                    })
+                    permissions::share(
+                        permissions::share::Config {
+                            role,
+                            type_,
+                            discoverable,
+                            domain,
+                        },
+                        file_ids,
+                        emails)
                     .await
                     .unwrap_or_else(handle_error)
                 }
