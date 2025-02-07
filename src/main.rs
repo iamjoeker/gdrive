@@ -22,6 +22,10 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+
+    /// Simulate operations but do not make any changes
+    #[arg(action, global=true, long)]
+    dry_run: bool,
 }
 
 #[derive(Subcommand)]
@@ -350,6 +354,9 @@ enum PermissionCommand {
         /// Whether the permission allows the file to be discovered through search. This is only applicable for permissions of type domain or anyone
         #[arg(long)]
         discoverable: bool,
+
+        #[arg(long, required = false, default_value_t = false)]
+        notify: bool,
     },
 
     /// List permissions for a file
@@ -677,6 +684,7 @@ async fn main() {
                     discoverable,
                     emails,
                     domain,
+                    notify,
                 } => {
                     // fmt
                     permissions::share(
@@ -685,6 +693,7 @@ async fn main() {
                             type_,
                             discoverable,
                             domain,
+                            notify_on_share: notify,
                         },
                         file_ids,
                         emails)

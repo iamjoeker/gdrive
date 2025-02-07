@@ -14,6 +14,7 @@ pub struct Config {
     pub type_: permission::Type,
     pub discoverable: bool,
     pub domain: Option<String>,
+    pub notify_on_share: bool,
 }
 
 impl Config {
@@ -100,6 +101,10 @@ pub async fn create_permission(
         .param(
             "fields",
             "id,role,type,domain,emailAddress,allowFileDiscovery",
+        )
+        .param(
+            "sendNotificationEmail",
+            "false",
         )
         .transfer_ownership(requires_ownership_transfer)
         .add_scope(google_drive3::api::Scope::Full)
